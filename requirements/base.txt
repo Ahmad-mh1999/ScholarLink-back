@@ -1,0 +1,13 @@
+Django==5.0.4
+psycopg2-binary==2.9.9
+Pillow==10.3.0
+django-allauth==0.63.3
+django-taggit==5.0.1
+django-guardian==2.4.0
+python-decouple==3.8
+djangorestframework
+djangorestframework-simplejwt
+drf-yasg
+django-filter
+channels
+six

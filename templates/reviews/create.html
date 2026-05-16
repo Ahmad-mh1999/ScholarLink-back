@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Review - {{ article.title }}{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="card p-4">
+                <h4 class="fw-bold mb-1">Submit Review</h4>
+                <p class="text-muted mb-4">{{ article.title }}</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Rating</label>
+                        <div class="d-flex gap-2">
+                            {% for i in "12345" %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="rating" value="{{ i }}" id="rating{{ i }}">
+                                <label class="form-check-label" for="rating{{ i }}">{{ i }} ⭐</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Feedback</label>
+                        <textarea name="feedback" class="form-control" rows="6" placeholder="Write your detailed review..."></textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="is_anonymous" id="anonymous">
+                        <label class="form-check-label" for="anonymous">Submit anonymously</label>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Submit Review</button>
+                        <a href="{% url 'articles:detail' slug=article.slug %}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

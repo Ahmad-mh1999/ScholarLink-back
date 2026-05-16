@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Sign Up - ScholarLink{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card p-4">
+                <div class="text-center mb-4">
+                    <h4 class="fw-bold">Create Academic Profile</h4>
+                    <p class="text-muted">Fill in the details below to begin your journey.</p>
+                </div>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">First Name</label>
+                            <input type="text" name="first_name" class="form-control" placeholder="Isaac" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Last Name</label>
+                            <input type="text" name="last_name" class="form-control" placeholder="Newton" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" placeholder="isaac@cambridge.edu" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control" placeholder="isaac_newton" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Field of Study</label>
+                        <input type="text" name="field_of_study" class="form-control" placeholder="Theoretical Physics">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Academic Status</label>
+                        <select name="academic_status" class="form-select">
+                            <option value="undergraduate">Undergraduate</option>
+                            <option value="graduate">Graduate</option>
+                            <option value="phd">PhD</option>
+                            <option value="professor">Professor</option>
+                            <option value="researcher">Researcher</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Institution</label>
+                        <input type="text" name="institution" class="form-control" placeholder="University of Cambridge">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password1" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Password</label>
+                        <input type="password" name="password2" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Create My Account →</button>
+                </form>
+                <p class="text-center mt-3 text-muted small">
+                    Already have an account? <a href="{% url 'accounts:login' %}" style="color: var(--primary);">Sign In</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

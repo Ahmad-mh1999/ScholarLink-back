@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Edit Profile - ScholarLink{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="card p-4">
+                <h4 class="fw-bold mb-4">Edit Profile</h4>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">First Name</label>
+                            <input type="text" name="first_name" class="form-control" value="{{ user.first_name }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Last Name</label>
+                            <input type="text" name="last_name" class="form-control" value="{{ user.last_name }}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Title</label>
+                        <input type="text" name="title" class="form-control" value="{{ user.title }}" placeholder="e.g. Senior Researcher">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Bio</label>
+                        <textarea name="bio" class="form-control" rows="4" placeholder="Tell us about yourself...">{{ user.bio }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Institution</label>
+                        <input type="text" name="institution" class="form-control" value="{{ user.institution }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Field of Study</label>
+                        <input type="text" name="field_of_study" class="form-control" value="{{ user.field_of_study }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Academic Status</label>
+                        <select name="academic_status" class="form-select">
+                            <option value="undergraduate" {% if user.academic_status == 'undergraduate' %}selected{% endif %}>Undergraduate</option>
+                            <option value="graduate" {% if user.academic_status == 'graduate' %}selected{% endif %}>Graduate</option>
+                            <option value="phd" {% if user.academic_status == 'phd' %}selected{% endif %}>PhD</option>
+                            <option value="professor" {% if user.academic_status == 'professor' %}selected{% endif %}>Professor</option>
+                            <option value="researcher" {% if user.academic_status == 'researcher' %}selected{% endif %}>Researcher</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Location</label>
+                        <input type="text" name="location" class="form-control" value="{{ user.location }}" placeholder="e.g. Seattle, WA">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">ORCID ID</label>
+                        <input type="text" name="orcid_id" class="form-control" value="{{ user.orcid_id }}" placeholder="0000-0000-0000-0000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Website</label>
+                        <input type="url" name="website" class="form-control" value="{{ user.website }}" placeholder="https://yourwebsite.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Avatar</label>
+                        {% if user.avatar %}
+                        <img src="{{ user.avatar.url }}" class="d-block mb-2 rounded-circle" width="80" height="80" style="object-fit: cover;">
+                        {% endif %}
+                        <input type="file" name="avatar" class="form-control" accept="image/*">
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <a href="{% url 'accounts:profile' username=user.username %}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

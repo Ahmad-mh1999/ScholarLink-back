@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ article.title }}{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row">
+        <div class="col-lg-8">
+
+            <!-- Article Header -->
+            {% if article.cover_image %}
+            <img src="{{ article.cover_image.url }}" class="img-fluid rounded-3 mb-4 w-100" style="max-height: 400px; object-fit: cover;">
+            {% endif %}
+
+            <span class="badge-category">{{ article.category.name }}</span>
+            <h1 class="fw-bold mt-2">{{ article.title }}</h1>
+
+            <div class="d-flex align-items-center gap-3 my-3">
+                <div class="d-flex align-items-center gap-2">
+                    {% if article.author.avatar %}
+                    <img src="{{ article.author.avatar.url }}" class="rounded-circle" width="40" height="40">
+                    {% else %}
+                    <i class="fas fa-user-circle fa-2x text-muted"></i>
+                    {% endif %}
+                    <div>
+                        <a href="{% url 'accounts:profile' username=article.author.username %}" class="text-dark fw-bold text-decoration-none">
+                            {{ article.author.get_full_name }}
+                        </a>
+                        <div class="text-muted small">{{ article.author.title }} · {{ article.published_at|date:"M d, Y" }}</div>
+                    </div>
+                </div>
+                <small class="text-muted ms-auto">
+                    <i class="fas fa-clock me-1"></i>{{ article.read_time }} min read
+                </small>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex gap-2 mb-4">
+                {% if article.pdf_file %}
+                <a href="{{ article.pdf_file.url }}" class="btn btn-primary btn-sm" download>
+                    <i class="fas fa-download me-1"></i>Download PDF
+                </a>
+                {% endif %}
+                <button class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-quote-right me-1"></i>{{ article.citations_count }} Cite
+                </button>
+                <a href="{% url 'articles:like' slug=article.slug %}" class="btn btn-outline-danger btn-sm">
+                    <i class="fas fa-heart me-1"></i>{{ article.likes_count }} Like
+                </a>
+            </div>
+
+            <!-- Content -->
+            <div class="card p-4 mb-4">
+                <p class="lead text-muted">{{ article.description }}</p>
+                <hr>
+                <div>{{ article.content|linebreaks }}</div>
+            </div>
+
+            <!-- Tags -->
+            {% if article.tags.all %}
+            <div class="mb-4">
+                {% for tag in article.tags.all %}
+                <span class="badge bg-light text-dark me-1">#{{ tag.name }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Comments -->
+            <div class="card p-4">
+                <h5 class="fw-bold mb-3">
+                    <i class="fas fa-comments me-2"></i>Comments ({{ article.comments.count }})
+                </h5>
+
+                {% if user.is_authenticated %}
+                <form method="post" action="{% url 'comments:create' slug=article.slug %}" class="mb-4">
+                    {% csrf_token %}
+                    <textarea name="content" class="form-control mb-2" rows="3" placeholder="Write a comment..."></textarea>
+                    <button type="submit" class="btn btn-primary btn-sm">Post Comment</button>
+                </form>
+                {% endif %}
+
+                {% for comment in comments %}
+                <div class="d-flex gap-3 mb-3">
+                    <i class="fas fa-user-circle fa-2x text-muted mt-1"></i>
+                    <div class="flex-grow-1">
+                        <div class="bg-light rounded-3 p-3">
+                            <strong>{{ comment.author.get_full_name }}</strong>
+                            <small class="text-muted ms-2">{{ comment.created_at|timesince }} ago</small>
+                            <p class="mb-0 mt-1">{{ comment.content }}</p>
+                        </div>
+                        {% if user == comment.author %}
+                        <a href="{% url 'comments:delete' pk=comment.pk %}" class="text-danger small">Delete</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card p-3 mb-3">
+                <h6 class="fw-bold">Related Articles</h6>
+                {% for r in related %}
+                <a href="{% url 'articles:detail' slug=r.slug %}" class="text-decoration-none">
+                    <div class="d-flex gap-2 py-2 border-bottom">
+                        {% if r.cover_image %}
+                        <img src="{{ r.cover_image.url }}" class="rounded" width="60" height="60" style="object-fit: cover;">
+                        {% endif %}
+                        <div>
+                            <p class="mb-0 small fw-bold text-dark">{{ r.title|truncatewords:8 }}</p>
+                            <small class="text-muted">{{ r.read_time }} min read</small>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
