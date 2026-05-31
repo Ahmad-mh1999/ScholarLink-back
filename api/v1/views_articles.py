@@ -1,11 +1,15 @@
 from rest_framework import generics, status, permissions, filters
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
+
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db.models import Count
 
-from apps.articles.models import Article, ArticleRating, Bookmark
+from apps.articles.models import Article, ArticleRating, Bookmark, Journal
+
 from apps.articles.serializers import (
     ArticleListSerializer,
     ArticleDetailSerializer,
@@ -22,7 +26,7 @@ from common.pagination import StandardPagination
 
 class ArticleListView(generics.ListCreateAPIView):
     serializer_class = ArticleListSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.AllowAny]
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ArticleFilter
@@ -56,7 +60,7 @@ class ArticleListView(generics.ListCreateAPIView):
 class ArticleDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Article.objects.all()
     serializer_class = ArticleDetailSerializer
-    permission_classes = [IsAuthorOrReadOnly]
+    permission_classes = [permissions.AllowAny]
     lookup_field = 'slug'
 
     def retrieve(self, request, *args, **kwargs):
@@ -172,7 +176,56 @@ class CitationView(APIView):
         return Response(serializer.data)
 
 
+class RecommendJournalsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, id):
+        article = get_object_or_404(Article, id=id)
+
+        if not article.nominated_journal and not hasattr(article, 'category'):
+            return Response({"detail": "Article not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Smart matching endpoint:
+        # If article.is_priority is True: instantly return top 3 journals matching study field,
+        # sorted by impact_factor.
+        if article.is_priority:
+            field = None
+            if getattr(article, 'category', None):
+                # attempt to map category name into field_of_study text match
+                field = article.category.name
+            if not field and hasattr(article.author, 'field_of_study'):
+                field = article.author.field_of_study
+
+            qs = Journal.objects.all()
+            if field:
+                qs = qs.filter(field_of_study__icontains=field)
+            journals = qs.order_by('-impact_factor')[:3]
+
+            return Response({
+                'article_id': article.id,
+                'is_priority': True,
+                'journals': [
+                    {
+                        'id': j.id,
+                        'name': j.name,
+                        'field_of_study': j.field_of_study,
+                        'impact_factor': str(j.impact_factor) if j.impact_factor is not None else None,
+                        'publication_type': j.publication_type,
+                        'publication_fee': str(j.publication_fee) if getattr(j, 'publication_fee', None) is not None else None,
+                    }
+                    for j in journals
+                ],
+            })
+
+        return Response({
+            'article_id': article.id,
+            'is_priority': False,
+            'journals': [],
+        })
+
+
 class RecommendationsView(generics.ListAPIView):
+
     serializer_class = ArticleListSerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = StandardPagination
@@ -184,3 +237,20 @@ class RecommendationsView(generics.ListAPIView):
             tags__in=article.tags.all(),
             status='published'
         ).exclude(id=article.id).distinct()[:10]
+
+class LandingStatsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from apps.accounts.models import User
+        from apps.categories.models import Category
+
+        total_researchers = User.objects.filter(is_active=True).count()
+        total_articles = Article.objects.filter(status='published').count()
+        total_journals = Category.objects.count()
+
+        return Response({
+            'total_researchers': total_researchers,
+            'total_articles': total_articles,
+            'total_journals': total_journals,
+        })

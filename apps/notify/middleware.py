@@ -12,7 +12,8 @@ def get_user_from_token(token_key):
         token = AccessToken(token_key)
         user_id = token['user_id']
         return User.objects.get(id=user_id)
-    except Exception:
+    except Exception as e:
+        print(f'JWT authentication error: {e}')
         return AnonymousUser()
 
 

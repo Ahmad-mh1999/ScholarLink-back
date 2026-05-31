@@ -29,7 +29,6 @@ class ArticleTestCase(APITestCase):
             'content': 'Test Content',
             'category_id': self.category.pk,
             'status': 'published',
-            'access_level': 'public'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)

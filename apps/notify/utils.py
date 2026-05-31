@@ -17,16 +17,19 @@ def send_notification(recipient, sender, notification_type, title, message, arti
         article_slug=article_slug
     )
 
-    channel_layer = get_channel_layer()
-    group_name = f'notifications_{recipient.id}'
+    try:
+        channel_layer = get_channel_layer()
+        group_name = f'notifications_{recipient.id}'
 
-    async_to_sync(channel_layer.group_send)(
-        group_name,
-        {
-            'type': 'notification_message',
-            'notification': NotificationSerializer(notification).data
-        }
-    )
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                'type': 'notification_message',
+                'notification': NotificationSerializer(notification).data
+            }
+        )
+    except Exception as e:
+        print(f'Error sending notification to channel layer: {e}')
 
     return notification
 

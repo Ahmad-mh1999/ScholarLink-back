@@ -11,5 +11,6 @@ urlpatterns = [
     path('<slug:slug>/delete/', views.article_delete_view, name='delete'),
     path('<slug:slug>/like/', views.article_like_view, name='like'),
     path('explore/', views.explore_view, name='explore'),
+    path('download/<int:article_id>/', views.download_manuscript, name='download_manuscript'),
 ]
 

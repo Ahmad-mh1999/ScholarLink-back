@@ -20,7 +20,7 @@ class ArticleFilter(FilterSet):
     class Meta:
         model = Article
         fields = [
-            'category__slug', 'status', 'access_level',
+            'category__slug', 'status',
             'is_featured', 'date_from', 'date_to',
             'author', 'tag', 'this_week', 'this_month', 'this_year'
         ]

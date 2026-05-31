@@ -4,22 +4,24 @@ from channels.db import database_sync_to_async
 from .models import Notification
 from .serializers import NotificationSerializer
 
-
 class NotificationConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         self.user = self.scope['user']
         if self.user.is_anonymous:
-            await self.close()
+            print(f'WebSocket connection rejected: No valid user/token')
+            await self.close(code=4001, reason='Authentication required')
             return
         self.group_name = f'notifications_{self.user.id}'
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        print(f'WebSocket connection established for user {self.user.id}')
         await self.send_unread_count()
 
     async def disconnect(self, close_code):
         if hasattr(self, 'group_name'):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            print(f'WebSocket disconnected for user {self.user.id} with code {close_code}')
 
     async def receive(self, text_data):
         data = json.loads(text_data)
@@ -28,10 +30,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             await self.mark_notification_read(notification_id)
 
     async def notification_message(self, event):
-        await self.send(text_data=json.dumps({
-            'type': 'notification',
-            'notification': event['notification']
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'notification',
+                'notification': event['notification']
+            }))
+        except Exception as e:
+            print(f'Error sending notification: {e}')
 
     async def send_unread_count(self):
         count = await self.get_unread_count()

@@ -23,7 +23,6 @@ class User(AbstractUser):
         choices=AcademicStatus.choices,
         default=AcademicStatus.UNDERGRADUATE
     )
-    study_year = models.CharField(max_length=50, blank=True)
 # مثال: "السنة الثالثة" أو "دكتوراه السنة الثانية"
     location = models.CharField(max_length=255, blank=True)
     title = models.CharField(max_length=255, blank=True)
@@ -43,7 +42,6 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         USER = 'user', 'مستخدم عادي'
         REVIEWER = 'reviewer', 'مراجع أكاديمي'
-        MODERATOR = 'moderator', 'مشرف محتوى'
         ADMIN = 'admin', 'مسؤول'
 
     role = models.CharField(

@@ -2,6 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.http import FileResponse, Http404
+from django.contrib.auth.decorators import permission_required
 
 from .models import Article
 from .forms import ArticleForm
@@ -148,4 +150,29 @@ def explore_view(request):
         'selected_category': selected_category,
     })
 
+
+@login_required
+def download_manuscript(request, article_id):
+    """
+    Secure endpoint for downloading article manuscript files (PDF/Docx).
+    Only accessible by the article author or admin users.
+    """
+    article = get_object_or_404(Article, id=article_id)
+    
+    # Check if user has permission to download (author or admin)
+    if request.user != article.author and not request.user.is_staff:
+        raise Http404("Article not found or you don't have permission to download this file.")
+    
+    if not article.pdf_file:
+        raise Http404("No manuscript file available for this article.")
+    
+    try:
+        response = FileResponse(
+            article.pdf_file.open('rb'),
+            as_attachment=True,
+            filename=f"{article.slug}_manuscript.pdf"
+        )
+        return response
+    except Exception as e:
+        raise Http404("Error downloading file.")
 

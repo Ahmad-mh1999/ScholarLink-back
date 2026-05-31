@@ -1,13 +1,26 @@
 from rest_framework import serializers
-from .models import Article, ArticleRating, Bookmark
+from .models import Article, ArticleRating, Bookmark, Journal
 from apps.accounts.serializers import UserSerializer
 from apps.categories.serializers import CategorySerializer
 from apps.categories.models import Category
 
 
+
+class JournalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Journal
+        fields = [
+            'id', 'name', 'field_of_study', 'impact_factor',
+            'publication_type', 'publication_fee', 'font_guidelines',
+            'margin_guidelines', 'figure_guidelines', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
 class ArticleListSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
+    nominated_journal = JournalSerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(),
         source='category',
@@ -22,9 +35,11 @@ class ArticleListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'slug', 'description', 'abstract',
             'cover_image', 'author', 'category', 'category_id',
-            'status', 'access_level', 'read_time', 'views_count',
+            'status', 'read_time', 'views_count',
             'likes_count', 'comments_count', 'average_rating',
-            'is_featured', 'published_at', 'created_at'
+            'is_featured', 'is_priority', 'published_at', 'created_at',
+            'nominated_journal', 'external_journal_accepted', 'external_journal_name',
+            'subsidy_status'
         ]
         read_only_fields = ['slug', 'views_count', 'likes_count', 'published_at']
 

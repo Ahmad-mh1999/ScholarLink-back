@@ -27,6 +27,14 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     password2 = serializers.CharField(write_only=True)
+    institution = serializers.CharField(required=True, allow_blank=False, error_messages={
+        'required': 'Institution is required.',
+        'blank': 'Institution cannot be blank.'
+    })
+    field_of_study = serializers.CharField(required=True, allow_blank=False, error_messages={
+        'required': 'Field of study is required.',
+        'blank': 'Field of study cannot be blank.'
+    })
 
     class Meta:
         model = User
@@ -39,6 +47,21 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data['password'] != data['password2']:
             raise serializers.ValidationError('Passwords do not match.')
+        
+        # Validate institution is not empty or just whitespace
+        institution = data.get('institution', '').strip()
+        if not institution:
+            raise serializers.ValidationError({'institution': 'Institution is required.'})
+        
+        # Validate field_of_study is not empty or just whitespace
+        field_of_study = data.get('field_of_study', '').strip()
+        if not field_of_study:
+            raise serializers.ValidationError({'field_of_study': 'Field of study is required.'})
+        
+        # Strip whitespace from institution and field_of_study
+        data['institution'] = institution
+        data['field_of_study'] = field_of_study
+        
         return data
 
     def create(self, validated_data):
@@ -48,4 +71,3 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
-    

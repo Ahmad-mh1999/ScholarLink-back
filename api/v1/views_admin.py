@@ -6,14 +6,20 @@ from django.db.models import Count, Q
 
 from apps.accounts.models import User
 from apps.accounts.serializers import UserSerializer
-from apps.articles.models import Article
+from apps.articles.models import Article, Journal
 from apps.articles.serializers import ArticleListSerializer
+from .admin_serializers import AdminJournalSerializer
+
 from apps.categories.models import Category
 from apps.categories.serializers import CategorySerializer
 from apps.notify.models import Notification
 from apps.notify.serializers import NotificationSerializer
 from apps.notify.utils import send_notification
 from common.permissions import IsAdmin
+
+
+# Journals are managed only by super/admin users
+
 
 User = get_user_model()
 
@@ -144,6 +150,28 @@ class AdminCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CategorySerializer
     queryset = Category.objects.all()
     lookup_field = 'id'
+
+
+class AdminJournalsListCreateView(generics.ListCreateAPIView):
+    """List & create journals for Admin Dashboard"""
+    permission_classes = [IsAdmin]
+    serializer_class = AdminJournalSerializer
+    queryset = Journal.objects.all()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(name__icontains=search) \
+                   .order_by('-impact_factor')
+        return qs.order_by('-impact_factor')
+
+
+class AdminJournalDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, delete a journal"""
+    permission_classes = [IsAdmin]
+    serializer_class = AdminJournalSerializer
+    queryset = Journal.objects.all()
 
 
 class SendNotificationView(APIView):

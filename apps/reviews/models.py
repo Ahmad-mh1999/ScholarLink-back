@@ -1,6 +1,29 @@
 from django.db import models
 from apps.accounts.models import User
 from apps.articles.models import Article
+from apps.categories.models import Category
+
+
+class Journal(models.Model):
+    title = models.CharField(max_length=500)
+    issn = models.CharField(max_length=50, unique=True, help_text="International Standard Serial Number")
+    field_of_study = models.CharField(max_length=255, help_text="Primary field of study")
+    categories = models.ManyToManyField(Category, related_name='journals', blank=True)
+    description = models.TextField(blank=True)
+    publisher = models.CharField(max_length=255, blank=True)
+    impact_factor = models.DecimalField(max_digits=5, decimal_places=3, null=True, blank=True)
+    website = models.URLField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['title']
+        verbose_name = 'Journal'
+        verbose_name_plural = 'Journals'
+
+    def __str__(self):
+        return f"{self.title} ({self.issn})"
 
 
 class ReviewRequest(models.Model):

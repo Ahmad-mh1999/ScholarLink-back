@@ -23,11 +23,11 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        user.is_active = False
+        user.is_active = True
         user.save()
         send_verification_email(user, request)
         return Response({
-            'message': 'Registration successful! Please check your email to verify your account.',
+            'message': 'Registration successful! Your account is now active.',
             'user': UserSerializer(user).data,
         }, status=status.HTTP_201_CREATED)
 

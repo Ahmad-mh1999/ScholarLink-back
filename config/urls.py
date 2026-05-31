@@ -32,6 +32,7 @@ urlpatterns = [
     path('reviews/', include('apps.reviews.urls')),
     path('categories/', include('apps.categories.urls')),
     path('admin-dashboard/', include('apps.admin_dashboard.urls')),
+    path('points/', include('apps.points.urls')),
 
 
 
