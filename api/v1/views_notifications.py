@@ -4,6 +4,10 @@ from rest_framework.views import APIView
 from apps.notify.models import Notification
 from apps.notify.serializers import NotificationSerializer
 from common.pagination import SmallPagination
+from django.contrib.auth import get_user_model
+from apps.notify.utils import send_notification
+
+User = get_user_model()
 
 
 class NotificationListView(generics.ListAPIView):
@@ -42,3 +46,36 @@ class UnreadCountView(APIView):
         count = Notification.objects.filter(recipient=request.user, is_read=False).count()
         return Response({'unread_count': count})
     
+
+class SendNotificationView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if not request.user.is_staff:
+            return Response({'error': 'Only admins can send notifications.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        title = request.data.get('title')
+        message = request.data.get('message')
+        send_to_all = request.data.get('send_to_all', False)
+        user_id = request.data.get('user_id')
+        
+        if not title or not message:
+            return Response({'error': 'Title and message are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if send_to_all:
+            recipients = User.objects.all()
+        elif user_id:
+            recipients = User.objects.filter(id=user_id)
+        else:
+            return Response({'error': 'Either send_to_all or user_id must be provided.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        for recipient in recipients:
+            send_notification(
+                recipient=recipient,
+                sender=request.user,
+                notification_type='system',
+                title=title,
+                message=message
+            )
+        
+        return Response({'message': f'Notification sent to {recipients.count()} recipient(s).'})

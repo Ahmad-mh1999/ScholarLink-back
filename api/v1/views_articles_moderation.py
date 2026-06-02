@@ -43,8 +43,8 @@ class ArticleSubmissionModerateView(APIView):
                 recipient=article.author,
                 sender=request.user,
                 notification_type='system',
-                title='تمت الموافقة على ورقتك',
-                message=f'تمت الموافقة على ورقتك "{article.title}" ونشرها بنجاح.',
+                title='Your paper has been approved',
+                message=f'Your paper "{article.title}" has been approved and published successfully.',
                 article_slug=article.slug,
             )
 

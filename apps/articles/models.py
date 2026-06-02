@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.utils.text import slugify
 from taggit.managers import TaggableManager
@@ -7,13 +9,16 @@ from apps.categories.models import Category
 
 
 class Journal(models.Model):
-    
+
     class PublicationType(models.TextChoices):
         OPEN_ACCESS = 'open_access', 'Open Access'
         SUBSCRIPTION = 'subscription', 'Subscription'
-    
+
     name = models.CharField(max_length=255, unique=True)
+    issn = models.CharField(max_length=50, blank=True)
     field_of_study = models.CharField(max_length=255)
+    publisher = models.CharField(max_length=255, blank=True)
+    website = models.URLField(blank=True)
     impact_factor = models.DecimalField(max_digits=5, decimal_places=2)
     publication_type = models.CharField(
         max_length=20,
@@ -21,17 +26,24 @@ class Journal(models.Model):
         default=PublicationType.OPEN_ACCESS
     )
     publication_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    is_active = models.BooleanField(default=True)
     font_guidelines = models.TextField(blank=True)
     margin_guidelines = models.TextField(blank=True)
     figure_guidelines = models.TextField(blank=True)
+    citation_style = models.CharField(max_length=100, blank=True)
+    max_word_count = models.PositiveIntegerField(null=True, blank=True)
+    min_word_count = models.PositiveIntegerField(null=True, blank=True)
+    max_pages = models.PositiveIntegerField(null=True, blank=True)
+    additional_requirements = models.TextField(blank=True)
+    description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         ordering = ['-impact_factor']
         verbose_name = 'Journal'
         verbose_name_plural = 'Journals'
-    
+
     def __str__(self):
         return f"{self.name} (IF: {self.impact_factor})"
 
@@ -39,8 +51,11 @@ class Journal(models.Model):
 class Article(models.Model):
 
     class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
         UNDER_REVIEW = 'under_review', 'Under Review'
+        NOMINATED = 'nominated', 'Nominated'
         PUBLISHED = 'published', 'Published'
+        REJECTED = 'rejected', 'Rejected'
 
     # ─── معلومات أساسية ───
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='articles')
@@ -62,9 +77,18 @@ class Article(models.Model):
     location = models.CharField(max_length=255, blank=True)
 
     # ─── الحالة ───
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.UNDER_REVIEW)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     is_featured = models.BooleanField(default=False)
     is_priority = models.BooleanField(default=False, help_text="Flag for expedited review requests")
+    assigned_reviewer = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_articles',
+        limit_choices_to={'role': User.Role.REVIEWER},
+        help_text='Reviewer currently assigned to evaluate this article'
+    )
 
     # ─── Journal Nomination (Reviewer Evaluation) ───
     nominated_journal = models.ForeignKey(
@@ -84,13 +108,18 @@ class Article(models.Model):
         blank=True,
         help_text="Name of external journal that accepted the article"
     )
-    
+
+    # ─── Submission Formatting ───
+    submission_font = models.CharField(max_length=100, blank=True)
+    submission_margins = models.CharField(max_length=100, blank=True)
+    submission_figures = models.TextField(blank=True)
+
     # ─── Subsidy Status ───
     class SubsidyStatus(models.TextChoices):
         NOT_ELIGIBLE = 'not_eligible', 'Not Eligible'
-        PENDING_REVIEW = 'pending_review', 'Pending Review'
+        SUBSIDY_PENDING = 'subsidy_pending', 'Subsidy Pending'
         APPROVED_FOR_COST_COVERAGE = 'approved_for_cost_coverage', 'Approved for Cost Coverage'
-    
+
     subsidy_status = models.CharField(
         max_length=30,
         choices=SubsidyStatus.choices,
@@ -122,25 +151,32 @@ class Article(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.title)
-        
-        # Automated Financial Subsidy Trigger
-        # If nominated_journal is assigned, it's open access, and author has >= 1000 points
-        if self.nominated_journal and self.nominated_journal.publication_type == 'open_access':
-            try:
-                # In this codebase, points live in apps.points.models.UserPoints (OneToOne).
-                author_points_total = 0
-                if hasattr(self.author, 'points'):
-                    # Some projects may expose a related object named `points`.
-                    points_obj = getattr(self.author, 'points')
-                    author_points_total = getattr(points_obj, 'total', 0) or 0
+            base_slug = slugify(self.title)
+            self.slug = base_slug
+            counter = 1
+            while Article.objects.filter(slug=self.slug).exclude(id=self.id).exists():
+                self.slug = f"{base_slug}-{counter}"
+                counter += 1
 
-                if author_points_total >= 1000:
-                    self.subsidy_status = self.SubsidyStatus.PENDING_REVIEW
-            except Exception:
-                pass
+        if self.assigned_reviewer and self.status == self.Status.DRAFT:
+            self.status = self.Status.UNDER_REVIEW
 
-        
+        author_points_total = 0
+        if hasattr(self.author, 'points') and self.author.points is not None:
+            author_points_total = getattr(self.author.points, 'total', 0) or 0
+
+        if author_points_total >= 1000:
+            self.subsidy_status = self.SubsidyStatus.SUBSIDY_PENDING
+        elif self.subsidy_status == self.SubsidyStatus.SUBSIDY_PENDING:
+            self.subsidy_status = self.SubsidyStatus.NOT_ELIGIBLE
+
+        if self.nominated_journal and self.status == self.Status.UNDER_REVIEW:
+            self.status = self.Status.NOMINATED
+
+        if self.status == self.Status.PUBLISHED and not self.published_at:
+            from django.utils import timezone
+            self.published_at = timezone.now()
+
         super().save(*args, **kwargs)
 
     # ─── الاستشهاد ───

@@ -16,7 +16,10 @@ from apps.articles.serializers import (
     ArticleRatingSerializer,
     BookmarkSerializer,
     CitationSerializer,
+    ArticleCreateSerializer,
+    PublicJournalSerializer,
 )
+from apps.articles.services import ArticleWorkflowService
 from apps.articles.filters import ArticleFilter
 from apps.notify.utils import notify_like
 from apps.points.utils import award_points
@@ -37,23 +40,68 @@ class ArticleListView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Article.objects.filter(
             status='published'
-        ).select_related('author', 'category')
+        ).select_related('author', 'category', 'assigned_reviewer', 'nominated_journal')
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return ArticleCreateSerializer
+        return ArticleListSerializer
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            from rest_framework.response import Response
+            from rest_framework import status
+            error_message = str(e)
+            
+            # Handle specific errors
+            if 'unique constraint' in error_message.lower():
+                return Response({
+                    'detail': 'An error occurred while saving. There seems to be a duplicate value.',
+                    'error_type': 'unique_constraint'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            elif 'permission' in error_message.lower():
+                return Response({
+                    'detail': 'You do not have permission to perform this action.',
+                    'error_type': 'permission_denied'
+                }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({
+                    'detail': f'An unexpected error occurred: {error_message}',
+                    'error_type': 'unknown_error'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
         # تأمين: لا تقبل أي محاولة لإرسال author من الفرونت
-        if 'author' in self.request.data:
-            self.request.data.pop('author', None)
-        if 'authors' in self.request.data:
-            self.request.data.pop('authors', None)
+        data = self.request.data.copy()
+        if 'author' in data:
+            data.pop('author', None)
+        if 'authors' in data:
+            data.pop('authors', None)
 
-        status_value = self.request.data.get('status', 'draft')
-        published_at = timezone.now() if status_value == 'published' else None
+        # Set status to under_review automatically on submission
         article = serializer.save(
             author=self.request.user,
-            published_at=published_at
+            status='under_review'
         )
-        if status_value == 'published':
-            award_points(self.request.user, 'publish_article')
+
+        # Auto-call recommend_journals and attach top result if match found
+        try:
+            recommended_journals = ArticleWorkflowService.recommend_journals(article)
+            if recommended_journals:
+                article.nominated_journal = recommended_journals[0]
+                article.save(update_fields=['nominated_journal'])
+        except Exception as e:
+            # Don't fail the whole submission if journal recommendation fails
+            pass
+
+        # Award 10 points to author on submission
+        try:
+            award_points(self.request.user, 'submit_article')
+        except Exception as e:
+            # Don't fail the whole submission if points awarding fails
+            pass
 
 
 
@@ -103,7 +151,7 @@ class MyArticlesView(generics.ListAPIView):
     def get_queryset(self):
         return Article.objects.filter(
             author=self.request.user
-        ).order_by('-created_at')
+        ).select_related('author', 'category', 'assigned_reviewer', 'nominated_journal').order_by('-created_at')
 
 
 class ArticleRatingView(APIView):
@@ -115,7 +163,7 @@ class ArticleRatingView(APIView):
 
         if not rating_value or int(rating_value) not in range(1, 6):
             return Response(
-                {'error': 'التقييم يجب أن يكون بين 1 و 5'},
+                {'error': 'Rating must be between 1 and 5'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -125,7 +173,7 @@ class ArticleRatingView(APIView):
             defaults={'rating': int(rating_value)}
         )
         return Response({
-            'message': 'تم التقييم بنجاح',
+            'message': 'Rating submitted successfully',
             'rating': rating_value,
             'average_rating': article.average_rating,
             'created': created
@@ -137,7 +185,7 @@ class ArticleRatingView(APIView):
             article=article,
             user=request.user
         ).delete()
-        return Response({'message': 'تم حذف التقييم'})
+        return Response({'message': 'Rating deleted'})
 
 
 class BookmarkView(APIView):
@@ -151,9 +199,9 @@ class BookmarkView(APIView):
         )
         if created:
             award_points(article.author, 'receive_bookmark')
-            return Response({'message': 'تمت الإضافة للمفضلة'})
+            return Response({'message': 'Added to bookmarks'})
         bookmark.delete()
-        return Response({'message': 'تمت الإزالة من المفضلة'})
+        return Response({'message': 'Removed from bookmarks'})
 
 
 class MyBookmarksView(generics.ListAPIView):
@@ -180,48 +228,36 @@ class RecommendJournalsView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, id):
-        article = get_object_or_404(Article, id=id)
-
-        if not article.nominated_journal and not hasattr(article, 'category'):
-            return Response({"detail": "Article not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        # Smart matching endpoint:
-        # If article.is_priority is True: instantly return top 3 journals matching study field,
-        # sorted by impact_factor.
-        if article.is_priority:
-            field = None
-            if getattr(article, 'category', None):
-                # attempt to map category name into field_of_study text match
-                field = article.category.name
-            if not field and hasattr(article.author, 'field_of_study'):
-                field = article.author.field_of_study
-
-            qs = Journal.objects.all()
-            if field:
-                qs = qs.filter(field_of_study__icontains=field)
-            journals = qs.order_by('-impact_factor')[:3]
-
-            return Response({
-                'article_id': article.id,
-                'is_priority': True,
-                'journals': [
-                    {
-                        'id': j.id,
-                        'name': j.name,
-                        'field_of_study': j.field_of_study,
-                        'impact_factor': str(j.impact_factor) if j.impact_factor is not None else None,
-                        'publication_type': j.publication_type,
-                        'publication_fee': str(j.publication_fee) if getattr(j, 'publication_fee', None) is not None else None,
-                    }
-                    for j in journals
-                ],
-            })
+        article = get_object_or_404(
+            Article.objects.select_related('author', 'category', 'nominated_journal'),
+            id=id,
+        )
+        journals = ArticleWorkflowService.recommend_journals(article)[:3]
 
         return Response({
             'article_id': article.id,
-            'is_priority': False,
-            'journals': [],
+            'status': article.status,
+            'journals': [
+                {
+                    'id': j.id,
+                    'name': j.name,
+                    'field_of_study': j.field_of_study,
+                    'impact_factor': str(j.impact_factor) if j.impact_factor is not None else None,
+                    'publication_type': j.publication_type,
+                    'publication_fee': str(j.publication_fee) if getattr(j, 'publication_fee', None) is not None else None,
+                }
+                for j in journals
+            ],
         })
+
+
+class PublicJournalsListView(generics.ListAPIView):
+    serializer_class = PublicJournalSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = StandardPagination
+
+    def get_queryset(self):
+        return Journal.objects.filter(is_active=True).order_by('-impact_factor')
 
 
 class RecommendationsView(generics.ListAPIView):

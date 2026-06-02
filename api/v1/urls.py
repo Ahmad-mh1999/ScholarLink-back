@@ -31,6 +31,7 @@ urlpatterns = [
 
     # ─── Articles ───
     path('articles/', views_articles.ArticleListView.as_view(), name='article_list'),
+    path('articles/public-journals/', views_articles.PublicJournalsListView.as_view(), name='public_journals'),
     path('articles/my/', views_articles.MyArticlesView.as_view(), name='my_articles'),
     path('articles/bookmarks/', views_articles.MyBookmarksView.as_view(), name='my_bookmarks'),
     path('articles/<slug:slug>/', views_articles.ArticleDetailView.as_view(), name='article_detail'),
@@ -61,6 +62,7 @@ urlpatterns = [
     path('notifications/unread/', views_notifications.UnreadCountView.as_view(), name='unread_count'),
     path('notifications/mark-all-read/', views_notifications.NotificationMarkAllReadView.as_view(), name='mark_all_read'),
     path('notifications/<int:pk>/read/', views_notifications.NotificationMarkReadView.as_view(), name='mark_read'),
+    path('notifications/send/', views_notifications.SendNotificationView.as_view(), name='send_notification'),
 
     # ─── Stats ───
     path('stats/platform/', views_stats.PlatformStatsView.as_view(), name='platform_stats'),
@@ -74,6 +76,7 @@ urlpatterns = [
     path('reviews/<int:pk>/respond/', views_reviews.RespondToReviewRequestView.as_view(), name='respond_review'),
     path('reviews/<int:pk>/submit/', views_reviews.SubmitReviewView.as_view(), name='submit_review'),
     path('articles/<slug:slug>/assign-reviewer/', views_reviews.AssignReviewerView.as_view(), name='assign_reviewer'),
+    path('articles/<slug:slug>/nominate-journal/', views_reviews.ReviewerNominateJournalView.as_view(), name='reviewer_nominate_journal'),
 
     # ─── Points ───
     path('points/my/', views_points.MyPointsView.as_view(), name='my_points'),
@@ -88,6 +91,10 @@ urlpatterns = [
     path('admin/users/<int:id>/deactivate/', views_admin.DeactivateUserView.as_view(), name='deactivate_user'),
     path('admin/articles/', views_admin.AdminArticlesListView.as_view(), name='admin_articles'),
     path('admin/articles/<slug:slug>/', views_admin.AdminArticleDetailView.as_view(), name='admin_article_detail'),
+    path('admin/articles/<slug:slug>/journal-recommendations/', views_admin.AdminArticleJournalRecommendationsView.as_view(), name='admin_article_journal_recommendations'),
+    path('admin/articles/<slug:slug>/assign-reviewer/', views_admin.AdminArticleAssignReviewerView.as_view(), name='admin_article_assign_reviewer'),
+    path('admin/articles/<slug:slug>/nominate-journal/', views_admin.AdminArticleNominateJournalView.as_view(), name='admin_article_nominate_journal'),
+    path('admin/articles/<slug:slug>/publish/', views_admin.AdminArticlePublishView.as_view(), name='admin_article_publish'),
     path('admin/categories/', views_admin.AdminCategoriesListView.as_view(), name='admin_categories'),
     path('admin/categories/<int:id>/', views_admin.AdminCategoryDetailView.as_view(), name='admin_category_detail'),
     path('admin/send-notification/', views_admin.SendNotificationView.as_view(), name='send_notification'),
@@ -102,4 +109,3 @@ urlpatterns = [
     # ─── Landing Page Stats (Public) ───
     path('landing-stats/', views_articles.LandingStatsView.as_view(), name='landing_stats'),
 ]
-

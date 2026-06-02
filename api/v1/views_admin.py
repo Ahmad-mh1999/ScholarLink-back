@@ -3,12 +3,20 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 
 from apps.accounts.models import User
 from apps.accounts.serializers import UserSerializer
 from apps.articles.models import Article, Journal
 from apps.articles.serializers import ArticleListSerializer
-from .admin_serializers import AdminJournalSerializer
+from apps.articles.services import ArticleWorkflowService
+from .admin_serializers import (
+    AdminJournalSerializer,
+    AssignArticleReviewerSerializer,
+    NominateArticleSerializer,
+    PublishArticleSerializer,
+    JournalRecommendationSerializer,
+)
 
 from apps.categories.models import Category
 from apps.categories.serializers import CategorySerializer
@@ -33,7 +41,7 @@ class AdminStatsView(APIView):
         total_articles = Article.objects.count()
         under_review = Article.objects.filter(status='under_review').count()
         published = Article.objects.filter(status='published').count()
-        
+
         return Response({
             'total_users': total_users,
             'total_articles': total_articles,
@@ -47,12 +55,12 @@ class AdminUsersListView(generics.ListAPIView):
     permission_classes = [IsAdmin]
     serializer_class = UserSerializer
     queryset = User.objects.all()
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         search = self.request.query_params.get('search')
         role = self.request.query_params.get('role')
-        
+
         if search:
             queryset = queryset.filter(
                 Q(username__icontains=search) |
@@ -60,10 +68,10 @@ class AdminUsersListView(generics.ListAPIView):
                 Q(first_name__icontains=search) |
                 Q(last_name__icontains=search)
             )
-        
+
         if role:
             queryset = queryset.filter(role=role)
-        
+
         return queryset.order_by('-date_joined')
 
 
@@ -114,19 +122,19 @@ class AdminArticlesListView(generics.ListAPIView):
     permission_classes = [IsAdmin]
     serializer_class = ArticleListSerializer
     queryset = Article.objects.all()
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         search = self.request.query_params.get('search')
         status_filter = self.request.query_params.get('status')
-        
+
         if search:
             queryset = queryset.filter(title__icontains=search)
-        
+
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-        
-        return queryset.select_related('author', 'category').order_by('-created_at')
+
+        return queryset.select_related('author', 'category', 'assigned_reviewer', 'nominated_journal').order_by('-created_at')
 
 
 class AdminArticleDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -174,6 +182,64 @@ class AdminJournalDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Journal.objects.all()
 
 
+class AdminArticleJournalRecommendationsView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request, slug):
+        article = get_object_or_404(
+            Article.objects.select_related('author', 'category', 'nominated_journal'),
+            slug=slug,
+        )
+        recommendations = ArticleWorkflowService.recommend_journals(article)[:5]
+        return Response({
+            'article': ArticleListSerializer(article).data,
+            'recommendations': JournalRecommendationSerializer(recommendations, many=True).data,
+        })
+
+
+class AdminArticleAssignReviewerView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, slug):
+        article = get_object_or_404(Article.objects.select_related('author', 'category'), slug=slug)
+        serializer = AssignArticleReviewerSerializer(data=request.data, context={'request': request, 'article': article})
+        serializer.is_valid(raise_exception=True)
+        review_request = serializer.save()
+        return Response({
+            'message': 'Reviewer assigned successfully.',
+            'review_request_id': review_request.id,
+            'article': ArticleListSerializer(article).data,
+        }, status=status.HTTP_201_CREATED)
+
+
+class AdminArticleNominateJournalView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, slug):
+        article = get_object_or_404(Article.objects.select_related('author', 'category', 'nominated_journal'), slug=slug)
+        serializer = NominateArticleSerializer(data=request.data, context={'request': request, 'article': article})
+        serializer.is_valid(raise_exception=True)
+        updated_article = serializer.save()
+        return Response({
+            'message': 'Article nominated successfully.',
+            'article': ArticleListSerializer(updated_article).data,
+        })
+
+
+class AdminArticlePublishView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, slug):
+        article = get_object_or_404(Article.objects.select_related('author', 'category', 'nominated_journal'), slug=slug)
+        serializer = PublishArticleSerializer(data=request.data, context={'request': request, 'article': article})
+        serializer.is_valid(raise_exception=True)
+        updated_article = serializer.save()
+        return Response({
+            'message': 'Article published successfully.',
+            'article': ArticleListSerializer(updated_article).data,
+        })
+
+
 class SendNotificationView(APIView):
     """إرسال إشعارات للكل أو لشخص معين"""
     permission_classes = [IsAdmin]
@@ -183,13 +249,13 @@ class SendNotificationView(APIView):
         title = request.data.get('title')
         message = request.data.get('message')
         notification_type = request.data.get('notification_type', 'system')
-        
+
         if not title or not message:
             return Response(
                 {'error': 'title and message are required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # إرسال للكل
         if recipient_id is None:
             recipients = User.objects.all()
@@ -204,11 +270,11 @@ class SendNotificationView(APIView):
                 )
                 send_notification(recipient, notification)
                 count += 1
-            
+
             return Response({
                 'message': f'Sent notification to {count} users'
             })
-        
+
         # إرسال لشخص معين
         try:
             recipient = User.objects.get(id=recipient_id)
@@ -220,7 +286,7 @@ class SendNotificationView(APIView):
                 message=message
             )
             send_notification(recipient, notification)
-            
+
             return Response({
                 'message': 'Notification sent successfully'
             })

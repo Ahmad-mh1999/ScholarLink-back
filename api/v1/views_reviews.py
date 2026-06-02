@@ -5,12 +5,14 @@ from django.shortcuts import get_object_or_404
 
 from apps.reviews.models import Review, ReviewRequest
 from apps.reviews.serializers import ReviewSerializer, ReviewRequestSerializer
-from apps.articles.models import Article
+from apps.articles.models import Article, Journal
 from apps.accounts.models import User
+from apps.articles.services import ArticleWorkflowService
 from apps.notify.utils import notify_review
 from apps.points.utils import award_points
-from common.permissions import IsReviewerOrReadOnly
+from common.permissions import IsReviewerOrAdmin, IsReviewerOrReadOnly
 from common.pagination import StandardPagination
+from .admin_serializers import NominateArticleSerializer
 
 
 class ReviewListView(generics.ListCreateAPIView):
@@ -62,7 +64,7 @@ class AssignReviewerView(APIView):
 
         if reviewer == request.user:
             return Response(
-                {'error': 'لا يمكنك تعيين نفسك كمراجع'},
+                {'error': 'You cannot assign yourself as a reviewer'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -77,12 +79,12 @@ class AssignReviewerView(APIView):
 
         if not created:
             return Response(
-                {'error': 'تم إرسال طلب مراجعة لهذا المراجع مسبقاً'},
+                {'error': 'Review request already sent to this reviewer'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         return Response({
-            'message': f'تم إرسال طلب المراجعة إلى {reviewer.get_full_name()}',
+            'message': f'Review request sent to {reviewer.get_full_name()}',
             'request_id': review_request.id
         }, status=status.HTTP_201_CREATED)
 
@@ -101,17 +103,42 @@ class RespondToReviewRequestView(APIView):
         if action == 'accept':
             review_request.status = 'accepted'
             review_request.save()
-            return Response({'message': 'تم قبول طلب المراجعة'})
+            return Response({'message': 'Review request accepted'})
 
         elif action == 'reject':
             review_request.status = 'rejected'
             review_request.save()
-            return Response({'message': 'تم رفض طلب المراجعة'})
+            return Response({'message': 'Review request rejected'})
 
         return Response(
-            {'error': 'الإجراء غير صحيح. استخدم accept أو reject'},
+            {'error': 'Invalid action. Use accept or reject'},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+class ReviewerNominateJournalView(APIView):
+    permission_classes = [IsReviewerOrAdmin]
+
+    def post(self, request, slug):
+        article = get_object_or_404(
+            Article.objects.select_related('author', 'category', 'assigned_reviewer', 'nominated_journal'),
+            slug=slug,
+        )
+
+        if request.user.role == User.Role.REVIEWER and article.assigned_reviewer_id != request.user.id:
+            return Response(
+                {'error': 'You can only nominate journals for articles assigned to you.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = NominateArticleSerializer(data=request.data, context={'request': request, 'article': article})
+        serializer.is_valid(raise_exception=True)
+        updated_article = serializer.save()
+        return Response({
+            'message': 'Journal nominated successfully.',
+            'article_id': updated_article.id,
+            'status': updated_article.status,
+        })
 
 
 class SubmitReviewView(APIView):
@@ -132,7 +159,7 @@ class SubmitReviewView(APIView):
 
         if decision not in ['approved', 'rejected', 'revision']:
             return Response(
-                {'error': 'القرار يجب أن يكون: approved أو rejected أو revision'},
+                {'error': 'Decision must be: approved, rejected, or revision'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -150,22 +177,29 @@ class SubmitReviewView(APIView):
 
         if not created:
             return Response(
-                {'error': 'لقد قدمت مراجعة لهذا المقال مسبقاً'},
+                {'error': 'You have already submitted a review for this article'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         if decision == 'approved':
-            review_request.article.status = 'published'
-            review_request.article.save()
+            # Auto-nominate a journal after review approval
+            recommended_journals = ArticleWorkflowService.recommend_journals(review_request.article)
+            if recommended_journals:
+                review_request.article.nominated_journal = recommended_journals[0]
+                review_request.article.status = 'nominated'
+                review_request.article.save(update_fields=['nominated_journal', 'status'])
+            else:
+                review_request.article.status = 'nominated'
+                review_request.article.save(update_fields=['status'])
 
             # إشعار لصاحب الورقة عند الموافقة عليها
             from apps.notify.utils import send_notification
             send_notification(
                 recipient=review_request.article.author,
                 sender=request.user,
-                notification_type='system',
-                title='تمت الموافقة على ورقتك',
-                message=f'تمت الموافقة على ورقتك "{review_request.article.title}" بنجاح.',
+                notification_type='review',
+                title='Your paper has been approved',
+                message=f'Your paper "{review_request.article.title}" has been approved and nominated to a journal.',
                 article_slug=review_request.article.slug,
             )
 
@@ -174,6 +208,6 @@ class SubmitReviewView(APIView):
         award_points(request.user, 'submit_review')
 
         return Response({
-            'message': 'تم تقديم المراجعة بنجاح',
+            'message': 'Review submitted successfully',
             'decision': decision
         }, status=status.HTTP_201_CREATED)

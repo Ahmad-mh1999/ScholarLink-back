@@ -9,8 +9,8 @@ from .models import Article
 
 
 class ArticleFilter(FilterSet):
-    date_from = DateFilter(field_name='published_at', lookup_expr='gte')
-    date_to = DateFilter(field_name='published_at', lookup_expr='lte')
+    date_from = DateFilter(field_name='created_at', lookup_expr='gte')
+    date_to = DateFilter(field_name='created_at', lookup_expr='lte')
     author = CharFilter(field_name='author__username', lookup_expr='iexact')
     tag = CharFilter(field_name='tags__name', lookup_expr='iexact')
     this_week = BooleanFilter(method='filter_this_week')
@@ -28,7 +28,7 @@ class ArticleFilter(FilterSet):
     def filter_this_week(self, queryset, name, value):
         if value:
             return queryset.filter(
-                published_at__gte=timezone.now() - timedelta(days=7)
+                created_at__gte=timezone.now() - timedelta(days=7)
             )
         return queryset
 
@@ -36,14 +36,14 @@ class ArticleFilter(FilterSet):
         if value:
             now = timezone.now()
             return queryset.filter(
-                published_at__year=now.year,
-                published_at__month=now.month
+                created_at__year=now.year,
+                created_at__month=now.month
             )
         return queryset
 
     def filter_this_year(self, queryset, name, value):
         if value:
             return queryset.filter(
-                published_at__year=timezone.now().year
+                created_at__year=timezone.now().year
             )
         return queryset
