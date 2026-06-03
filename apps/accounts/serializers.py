@@ -11,6 +11,7 @@ class ExpertiseSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     expertise = ExpertiseSerializer(many=True, read_only=True)
     posts_count = serializers.ReadOnlyField()
+    points = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -19,9 +20,14 @@ class UserSerializer(serializers.ModelSerializer):
             'avatar', 'bio', 'institution', 'field_of_study',
             'academic_status', 'location', 'title', 'orcid_id',
             'website', 'expertise', 'date_joined',
-            'role', 'is_staff', 'is_active', 'posts_count'
+            'role', 'is_staff', 'is_active', 'posts_count', 'points'
         ]
         read_only_fields = ['date_joined']
+
+    def get_points(self, obj):
+        if hasattr(obj, 'points'):
+            return {'total': obj.points.total}
+        return {'total': 0}
 
 
 class RegisterSerializer(serializers.ModelSerializer):

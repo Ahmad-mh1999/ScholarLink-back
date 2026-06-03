@@ -41,12 +41,57 @@ class AdminStatsView(APIView):
         total_articles = Article.objects.count()
         under_review = Article.objects.filter(status='under_review').count()
         published = Article.objects.filter(status='published').count()
-
+        
+        # Articles by category
+        from apps.categories.models import Category
+        articles_by_category = Category.objects.annotate(
+            count=Count('articles', filter=__import__('django.db.models', fromlist=['Q']).Q(articles__status='published'))
+        ).values('name', 'count').order_by('-count')[:5]
+        
+        # Monthly articles (last 6 months)
+        monthly_articles = []
+        now = timezone.now()
+        for i in range(5, -1, -1):
+            date = now - timezone.timedelta(days=30 * i)
+            count = Article.objects.filter(
+                status='published',
+                published_at__year=date.year,
+                published_at__month=date.month
+            ).count()
+            monthly_articles.append({
+                'month': date.strftime('%b').upper(),
+                'count': count
+            })
+        
+        # Weekly activity (last 8 weeks)
+        weekly_activity = []
+        for i in range(7, -1, -1):
+            start_week = now - timezone.timedelta(weeks=i)
+            # Calculate week number
+            count = Article.objects.filter(
+                status='published',
+                published_at__gte=start_week,
+                published_at__lt=start_week + timezone.timedelta(weeks=1)
+            ).count()
+            weekly_activity.append({
+                'week': f'W{i+1}',
+                'count': count
+            })
+        
+        # Total reviews (sum)
+        total_reviews = __import__('apps.reviews.models', fromlist=['Review']).Review.objects.count()
+        quarterly_reviews = __import__('apps.reviews.models', fromlist=['Review']).Review.objects.filter(created_at__gte=timezone.now()-timezone.timedelta(days=90)).count()
+        
         return Response({
             'total_users': total_users,
             'total_articles': total_articles,
             'under_review': under_review,
             'published': published,
+            'articles_by_category': list(articles_by_category),
+            'monthly_articles': monthly_articles,
+            'weekly_activity': weekly_activity,
+            'total_reviews': total_reviews,
+            'quarterly_reviews': quarterly_reviews,
         })
 
 
@@ -57,7 +102,7 @@ class AdminUsersListView(generics.ListAPIView):
     queryset = User.objects.all()
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related('points')
         search = self.request.query_params.get('search')
         role = self.request.query_params.get('role')
 
@@ -79,7 +124,7 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
     """تفاصيل المستخدم وتعديله وحذفه"""
     permission_classes = [IsAdmin]
     serializer_class = UserSerializer
-    queryset = User.objects.all()
+    queryset = User.objects.select_related('points')
     lookup_field = 'id'
 
 
@@ -295,3 +340,56 @@ class SendNotificationView(APIView):
                 {'error': 'Recipient not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class AdminArticleAcceptView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, slug):
+        article = get_object_or_404(Article.objects.select_related('author', 'category'), slug=slug)
+        
+        # Change status
+        article.status = Article.Status.NOMINATED
+        article.save(update_fields=['status'])
+
+        # Send notification
+        send_notification(
+            recipient=article.author,
+            sender=request.user,
+            notification_type='review',
+            title='Your article has been accepted!',
+            message=f'Your article "{article.title}" has been accepted and will be nominated to a journal.',
+            article_slug=article.slug,
+        )
+
+        return Response({
+            'message': 'Article accepted successfully.',
+            'article': ArticleListSerializer(article).data,
+        })
+
+
+class AdminArticleRejectView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, slug):
+        article = get_object_or_404(Article.objects.select_related('author', 'category'), slug=slug)
+        rejection_reason = request.data.get('rejection_reason', '')
+        
+        # Change status
+        article.status = Article.Status.REJECTED
+        article.save(update_fields=['status'])
+
+        # Send notification
+        send_notification(
+            recipient=article.author,
+            sender=request.user,
+            notification_type='review',
+            title='Your article has been rejected.',
+            message=f'Your article "{article.title}" has been rejected. {rejection_reason}',
+            article_slug=article.slug,
+        )
+
+        return Response({
+            'message': 'Article rejected successfully.',
+            'article': ArticleListSerializer(article).data,
+        })

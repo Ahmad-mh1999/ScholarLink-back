@@ -51,7 +51,7 @@ class SendNotificationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        if not request.user.is_staff:
+        if not request.user.role == 'admin':
             return Response({'error': 'Only admins can send notifications.'}, status=status.HTTP_403_FORBIDDEN)
         
         title = request.data.get('title')
