@@ -113,6 +113,9 @@ class ArticleListSerializer(serializers.ModelSerializer):
     author_role = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
     image = serializers.ImageField(source='cover_image', read_only=True)
+    pdf_file = serializers.FileField(read_only=True)
+    pdf_file_url = serializers.SerializerMethodField()
+    points = serializers.SerializerMethodField()
 
     class Meta:
         model = Article
@@ -126,7 +129,8 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'nominated_journal', 'nominated_journal_id', 'external_journal_accepted', 'external_journal_name',
             'submission_font', 'submission_margins', 'submission_figures',
             'subsidy_status',
-            'author_name', 'author_role', 'category_name'
+            'author_name', 'author_role', 'category_name',
+            'pdf_file', 'pdf_file_url', 'points'
         ]
         read_only_fields = ['slug', 'views_count', 'likes_count', 'published_at']
 
@@ -141,6 +145,19 @@ class ArticleListSerializer(serializers.ModelSerializer):
 
     def get_category_name(self, obj):
         return obj.category.name if obj.category else ''
+
+    def get_pdf_file_url(self, obj):
+        if obj.pdf_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.pdf_file.url)
+            return obj.pdf_file.url
+        return None
+
+    def get_points(self, obj):
+        if hasattr(obj.author, 'points') and obj.author.points is not None:
+            return getattr(obj.author.points, 'total', 0) or 0
+        return 0
 
 
 class ArticleDetailSerializer(ArticleListSerializer):

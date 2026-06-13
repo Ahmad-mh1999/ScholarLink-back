@@ -85,6 +85,7 @@ urlpatterns = [
 
     # ─── Admin ───
     path('admin/stats/', views_admin.AdminStatsView.as_view(), name='admin_stats'),
+    path('stats/reviewer/', views_admin.ReviewerStatsView.as_view(), name='reviewer_stats'),
     path('admin/users/', views_admin.AdminUsersListView.as_view(), name='admin_users'),
     path('admin/users/<int:id>/', views_admin.AdminUserDetailView.as_view(), name='admin_user_detail'),
     path('admin/users/<int:id>/activate/', views_admin.ActivateUserView.as_view(), name='activate_user'),

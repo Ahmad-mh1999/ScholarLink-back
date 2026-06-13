@@ -41,13 +41,13 @@ class AdminStatsView(APIView):
         total_articles = Article.objects.count()
         under_review = Article.objects.filter(status='under_review').count()
         published = Article.objects.filter(status='published').count()
-        
+
         # Articles by category
         from apps.categories.models import Category
         articles_by_category = Category.objects.annotate(
             count=Count('articles', filter=__import__('django.db.models', fromlist=['Q']).Q(articles__status='published'))
         ).values('name', 'count').order_by('-count')[:5]
-        
+
         # Monthly articles (last 6 months)
         monthly_articles = []
         now = timezone.now()
@@ -62,7 +62,7 @@ class AdminStatsView(APIView):
                 'month': date.strftime('%b').upper(),
                 'count': count
             })
-        
+
         # Weekly activity (last 8 weeks)
         weekly_activity = []
         for i in range(7, -1, -1):
@@ -77,11 +77,11 @@ class AdminStatsView(APIView):
                 'week': f'W{i+1}',
                 'count': count
             })
-        
+
         # Total reviews (sum)
         total_reviews = __import__('apps.reviews.models', fromlist=['Review']).Review.objects.count()
         quarterly_reviews = __import__('apps.reviews.models', fromlist=['Review']).Review.objects.filter(created_at__gte=timezone.now()-timezone.timedelta(days=90)).count()
-        
+
         return Response({
             'total_users': total_users,
             'total_articles': total_articles,
@@ -89,6 +89,76 @@ class AdminStatsView(APIView):
             'published': published,
             'articles_by_category': list(articles_by_category),
             'monthly_articles': monthly_articles,
+            'weekly_activity': weekly_activity,
+            'total_reviews': total_reviews,
+            'quarterly_reviews': quarterly_reviews,
+        })
+
+
+class ReviewerStatsView(APIView):
+    """إحصائيات لوحة تحكم المراجع"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.Role.REVIEWER:
+            return Response(
+                {'error': 'Only reviewers can access this endpoint.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        reviewer = request.user
+
+        # Articles assigned to this reviewer
+        assigned_articles = Article.objects.filter(assigned_reviewer=reviewer)
+        total_assigned = assigned_articles.count()
+        under_review = assigned_articles.filter(status='under_review').count()
+        completed = assigned_articles.filter(status__in=['published', 'rejected']).count()
+
+        # Articles by category
+        from apps.categories.models import Category
+        articles_by_category = Category.objects.annotate(
+            count=Count('articles', filter=Q(articles__assigned_reviewer=reviewer))
+        ).values('name', 'count').order_by('-count')[:5]
+
+        # Monthly reviews (last 6 months)
+        monthly_reviews = []
+        now = timezone.now()
+        for i in range(5, -1, -1):
+            date = now - timezone.timedelta(days=30 * i)
+            count = assigned_articles.filter(
+                updated_at__year=date.year,
+                updated_at__month=date.month
+            ).count()
+            monthly_reviews.append({
+                'month': date.strftime('%b').upper(),
+                'count': count
+            })
+
+        # Weekly activity (last 8 weeks)
+        weekly_activity = []
+        for i in range(7, -1, -1):
+            start_week = now - timezone.timedelta(weeks=i)
+            count = assigned_articles.filter(
+                updated_at__gte=start_week,
+                updated_at__lt=start_week + timezone.timedelta(weeks=1)
+            ).count()
+            weekly_activity.append({
+                'week': f'W{i+1}',
+                'count': count
+            })
+
+        # Total reviews
+        total_reviews = completed
+        quarterly_reviews = assigned_articles.filter(
+            updated_at__gte=timezone.now()-timezone.timedelta(days=90)
+        ).count()
+
+        return Response({
+            'total_articles': total_assigned,
+            'under_review': under_review,
+            'completed': completed,
+            'articles_by_category': list(articles_by_category),
+            'monthly_reviews': monthly_reviews,
             'weekly_activity': weekly_activity,
             'total_reviews': total_reviews,
             'quarterly_reviews': quarterly_reviews,
