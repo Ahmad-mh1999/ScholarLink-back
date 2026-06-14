@@ -23,7 +23,10 @@ from apps.categories.serializers import CategorySerializer
 from apps.notify.models import Notification
 from apps.notify.serializers import NotificationSerializer
 from apps.notify.utils import send_notification
+from rest_framework.permissions import IsAuthenticated
 from common.permissions import IsAdmin
+
+
 
 
 # Journals are managed only by super/admin users
